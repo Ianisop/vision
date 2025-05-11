@@ -55,7 +55,7 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 
 
 
-class HelloTriangleApplication 
+class Vision
 {
 public:
     void run()
@@ -340,7 +340,7 @@ private:
 
 
 int main() {
-    HelloTriangleApplication app;
+    Vision app;
 
     try {
         app.run();
