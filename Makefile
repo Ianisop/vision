@@ -1,9 +1,10 @@
-CXX = g++
+CXX = g++ -g3
 
 VULKAN_SDK_PATH = /home/user/VulkanSDK/x.x.x.x/x86_64
 STB_INCLUDE_PATH = /home/user/libraries/stb
+TINYOBJ_INCLUDE_PATH = /home/user/libraries/tinyobjloader
 
-CFLAGS = -std=c++17 -I$(VULKAN_SDK_PATH)/include -I$(STB_INCLUDE_PATH)
+CFLAGS = -std=c++17 -I$(VULKAN_SDK_PATH)/include -I$(STB_INCLUDE_PATH) -I$(TINYOBJ_INCLUDE_PATH) 
 LDFLAGS = -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
 # Shader compiler
