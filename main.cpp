@@ -14,6 +14,13 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_impl_vulkan.h"
+#include "imgui_impl_glfw.h"
+#include "imgui/imgui.h"
+
+
+
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -31,6 +38,11 @@
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
+
+float smoothedFPS = 60.0f;   
+float smoothingFactor = 0.006f;  // Lower values = more smoothing, try 0.01 to 0.
+
+float deltaTime = 0;
 
 const std::string MODEL_PATH = "models/viking_room.obj";
 const std::string TEXTURE_PATH = "textures/viking_room.png";
@@ -186,6 +198,8 @@ private:
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
     VkSampler textureSampler;
+    u_int32_t minImageCount;
+    u_int32_t maxImageCount;
 
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
@@ -199,6 +213,7 @@ private:
     std::vector<void*> uniformBuffersMapped;
 
     VkDescriptorPool descriptorPool;
+    VkDescriptorPool imGuiDescriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
 
     std::vector<VkCommandBuffer> commandBuffers;
@@ -247,45 +262,90 @@ private:
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
-        createDescriptorPool();
+        createDescriptorPools();
         createDescriptorSets();
         createCommandBuffers();
+        initIMGUI();
         createSyncObjects();
     }
 
     void mainLoop() {
-        using Clock = std::chrono::high_resolution_clock;
-        using TimePoint = std::chrono::time_point<Clock>;
-    
-        TimePoint lastTime = Clock::now();
-        int frameCount = 0;
-        float fps = 0.0f;
-        float timeAccumulator = 0.0f;
+        auto lastFrameTime = std::chrono::high_resolution_clock::now();
     
         while (!glfwWindowShouldClose(window)) {
-            TimePoint currentTime = Clock::now();
-            std::chrono::duration<float> elapsed = currentTime - lastTime;
-            lastTime = currentTime;
-    
-            float deltaTime = elapsed.count();  // Time per frame in seconds
-            timeAccumulator += deltaTime;
-            frameCount++;
-    
-            // Print FPS every second
-            if (timeAccumulator >= 1.0f) {
-                fps = frameCount / timeAccumulator;
-                std::cout << "FPS: " << fps << std::endl;
-    
-                frameCount = 0;
-                timeAccumulator = 0.0f;
-            }
-    
             glfwPollEvents();
+    
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+            lastFrameTime = currentTime;
+            
+            // Calculate current FPS
+            float currentFPS = 1.0f / deltaTime;
+    
+            // Apply exponential smoothing
+            smoothedFPS = (smoothingFactor * currentFPS) + ((1.0f - smoothingFactor) * smoothedFPS);
+    
+            // Start ImGui frame
+            ImGui_ImplVulkan_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+    
+            // Display smoothed FPS
+            ImGui::Begin("Performance");
+            ImGui::Text("Smoothed FPS: %.1f", smoothedFPS);
+            ImGui::End();
+    
+            // Render ImGui
+            ImGui::Render();
+    
+            // Your rendering logic
             drawFrame();
         }
     
         vkDeviceWaitIdle(device);
     }
+    
+    
+    
+    void initIMGUI() {
+        // Initialize ImGui
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+    
+        // Set dark theme
+        ImGui::StyleColorsDark();
+    
+        // Initialize ImGui GLFW Vulkan backend
+        if (!ImGui_ImplGlfw_InitForVulkan(window, true)) {
+            throw std::runtime_error("Failed to initialize ImGui GLFW backend.");
+        }
+    
+        // Find queue families for Vulkan
+        auto families = findQueueFamilies(physicalDevice);
+    
+        // Initialize Vulkan info for ImGui
+        ImGui_ImplVulkan_InitInfo init_info = {};
+        init_info.Instance = instance;
+        init_info.PhysicalDevice = physicalDevice;
+        init_info.Device = device;
+        init_info.QueueFamily = families.graphicsFamily.value();
+        init_info.Queue = graphicsQueue;
+        init_info.PipelineCache = VK_NULL_HANDLE;  // Optional
+        init_info.DescriptorPool = imGuiDescriptorPool;
+        init_info.MinImageCount = static_cast<uint32_t>(swapChainImages.size());
+        init_info.ImageCount = static_cast<uint32_t>(swapChainImages.size());
+        init_info.MSAASamples = getMaxUsableSampleCount();
+        init_info.RenderPass = renderPass;
+    
+        // Initialize ImGui Vulkan backend
+        if (!ImGui_ImplVulkan_Init(&init_info)) {
+            throw std::runtime_error("Failed to initialize ImGui Vulkan backend.");
+        }
+    
+        // No need to manually upload fonts or destroy font upload objects
+    }
+    
     
 
     void cleanupSwapChain() {
@@ -353,6 +413,10 @@ private:
         vkDestroySurfaceKHR(instance, surface, nullptr);
         vkDestroyInstance(instance, nullptr);
 
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        
         glfwDestroyWindow(window);
 
         glfwTerminate();
@@ -517,7 +581,11 @@ private:
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        minImageCount = swapChainSupport.capabilities.minImageCount; // set it globally
+        maxImageCount = swapChainSupport.capabilities.maxImageCount; // set it globally
+
+        uint32_t imageCount = minImageCount + 1;
+
         if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
             imageCount = swapChainSupport.capabilities.maxImageCount;
         }
@@ -1254,7 +1322,8 @@ private:
         }
     }
 
-    void createDescriptorPool() {
+    void createDescriptorPools() {
+        //UBO 
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1268,6 +1337,32 @@ private:
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+
+        //imGUI
+        VkDescriptorPoolSize pool_sizes[] = {
+            { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+        };
+        
+        VkDescriptorPoolCreateInfo pool_info = {};
+        pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        pool_info.maxSets = 1000 * std::size(pool_sizes);
+        pool_info.poolSizeCount = static_cast<uint32_t>(std::size(pool_sizes));
+        pool_info.pPoolSizes = pool_sizes;
+        
+        if (vkCreateDescriptorPool(device, &pool_info, nullptr, &imGuiDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
     }
@@ -1463,6 +1558,7 @@ private:
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -1567,7 +1663,10 @@ private:
         } else if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to present swap chain image!");
         }
-
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer); // renderIMGUI
+        endSingleTimeCommands(commandBuffer);
+        
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
