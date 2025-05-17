@@ -41,7 +41,6 @@ const uint32_t HEIGHT = 600;
 
 float smoothedFPS = 60.0f;   
 float smoothingFactor = 0.006f;  // Lower values = more smoothing, try 0.01 to 0.
-float gpuFrameTime = 0.0f;
 
 float deltaTime = 0;
 
@@ -208,8 +207,6 @@ private:
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
-    
-    VkQueryPool timestampQueryPool;
 
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -277,8 +274,7 @@ private:
     
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
-            calculateGpuFrameTime(device, gpuFrameTime);
-
+    
             auto currentTime = std::chrono::high_resolution_clock::now();
             deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
             lastFrameTime = currentTime;
@@ -887,32 +883,7 @@ private:
             }
         }
     }
-    
-    void calculateGpuFrameTime(VkDevice device, float& gpuFrameTimeMs) {
-        uint64_t timestamps[2] = {};
-        VkResult result = vkGetQueryPoolResults(
-            device,
-            timestampQueryPool,
-            0, 2,
-            sizeof(timestamps),
-            timestamps,
-            sizeof(uint64_t),
-            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT
-        );
-    
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("Failed to get query pool results!");
-        }
-    
-        // Get the GPU timestamp period (nanoseconds to milliseconds)
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-        float timestampPeriodMs = properties.limits.timestampPeriod * 1e-6f;
-    
-        // Calculate delta time
-        gpuFrameTimeMs = (timestamps[1] - timestamps[0]) * timestampPeriodMs;
-    }
-    
+
     void createCommandPool() {
         QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
@@ -1538,17 +1509,6 @@ private:
         }
     }
 
-
-    void createTimestampQueryPool(VkDevice device) {
-        VkQueryPoolCreateInfo queryPoolInfo{};
-        queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        queryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queryPoolInfo.queryCount = 2; // Start and end
-    
-        if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &timestampQueryPool) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create timestamp query pool!");
-        }
-    }
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1556,12 +1516,6 @@ private:
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
-        // Reset query pool (important)
-        vkCmdResetQueryPool(commandBuffer, timestampQueryPool, 0, 2);
-    
-        // Start timestamp
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, 0);
-    
 
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1607,8 +1561,6 @@ private:
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 
         vkCmdEndRenderPass(commandBuffer);
-        // End timestamp
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampQueryPool, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
