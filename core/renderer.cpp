@@ -56,70 +56,28 @@ namespace Vision
         cleanup();
     }
 
-    /// @brief Loads a file of .obj type from a given path into the vertex and index buffer
-    /// @param path
-    /// @return true if success
-    bool Renderer::loadObj(const char *path)
-    {
-        tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string warn, err;
-
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str()))
-        {
-            throw std::runtime_error(warn + err);
-        }
-
-        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-        for (const auto &shape : shapes)
-        {
-            for (const auto &index : shape.mesh.indices)
-            {
-                Vertex vertex{};
-
-                vertex.pos = {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]};
-
-                vertex.texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
-
-                vertex.color = {1.0f, 1.0f, 1.0f};
-
-                if (uniqueVertices.count(vertex) == 0)
-                {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(vertex);
-                }
-
-                indices.push_back(uniqueVertices[vertex]);
-            }
-        }
+   static void setFrameBufferResized(bool flag){
+        Renderer::framebufferResized = flag;
     }
 
-
-    void initWindow(Renderer* inst)
+    void Renderer::initWindow()
     {
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
+        
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-        glfwSetWindowUserPointer(window, inst);
+        glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     }
 
-    static void framebufferResizeCallback(GLFWwindow *window, int width, int height)
+    void Renderer::framebufferResizeCallback(GLFWwindow *window, int width, int height)
     {
-
-        app->framebufferResized = true;
+        setFrameBufferResized(true);
+    
     }
 
-    void initVulkan()
+    void Renderer::initVulkan()
     {
         createInstance();
         setupDebugMessenger();
@@ -149,7 +107,7 @@ namespace Vision
         createSyncObjects();
     }
 
-    void mainLoop()
+    void Renderer::mainLoop()
     {
         auto lastFrameTime = std::chrono::high_resolution_clock::now();
 
@@ -188,7 +146,7 @@ namespace Vision
         vkDeviceWaitIdle(device);
     }
 
-    void initIMGUI()
+    void Renderer::initIMGUI()
     {
         // Initialize ImGui
         IMGUI_CHECKVERSION();
@@ -231,7 +189,7 @@ namespace Vision
         // No need to manually upload fonts or destroy font upload objects
     }
 
-    void cleanupSwapChain()
+    void Renderer::cleanupSwapChain()
     {
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
@@ -254,7 +212,7 @@ namespace Vision
         vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
 
-    void cleanup()
+    void Renderer::cleanup()
     {
         cleanupSwapChain();
 
@@ -312,7 +270,7 @@ namespace Vision
         glfwTerminate();
     }
 
-    void recreateSwapChain()
+    void Renderer::recreateSwapChain()
     {
         int width = 0, height = 0;
         glfwGetFramebufferSize(window, &width, &height);
@@ -333,7 +291,7 @@ namespace Vision
         createFramebuffers();
     }
 
-    void createInstance()
+    void Renderer::createInstance()
     {
         if (enableValidationLayers && !checkValidationLayerSupport())
         {
@@ -378,7 +336,7 @@ namespace Vision
         }
     }
 
-    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo)
+    void Renderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo)
     {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -387,7 +345,7 @@ namespace Vision
         createInfo.pfnUserCallback = debugCallback;
     }
 
-    void setupDebugMessenger()
+    void Renderer::setupDebugMessenger()
     {
         if (!enableValidationLayers)
             return;
@@ -401,7 +359,7 @@ namespace Vision
         }
     }
 
-    void createSurface()
+    void Renderer::createSurface()
     {
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
         {
@@ -409,7 +367,7 @@ namespace Vision
         }
     }
 
-    void pickPhysicalDevice()
+    void Renderer::pickPhysicalDevice()
     {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -438,7 +396,10 @@ namespace Vision
         }
     }
 
-    void createLogicalDevice()
+    /// @brief Loads a file of .obj type from a given path into the vertex and index buffer
+    /// @param path
+    /// @return true if success
+    void Renderer::loadObj(const char* path)
     {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
@@ -489,7 +450,7 @@ namespace Vision
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
     }
 
-    void createSwapChain()
+    void Renderer::createSwapChain()
     {
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
@@ -550,7 +511,7 @@ namespace Vision
         swapChainExtent = extent;
     }
 
-    void createImageViews()
+    void Renderer::createImageViews()
     {
         swapChainImageViews.resize(swapChainImages.size());
 
@@ -560,7 +521,7 @@ namespace Vision
         }
     }
 
-    void createRenderPass()
+    void Renderer::createRenderPass()
     {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat;
@@ -635,7 +596,7 @@ namespace Vision
         }
     }
 
-    void createDescriptorSetLayout()
+    void Renderer::createDescriptorSetLayout()
     {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
@@ -663,7 +624,7 @@ namespace Vision
         }
     }
 
-    void createGraphicsPipeline()
+    void Renderer::createGraphicsPipeline()
     {
         auto vertShaderCode = readFile("shaders/shader.vert.spv");
         auto fragShaderCode = readFile("shaders/shader.frag.spv");
@@ -788,7 +749,7 @@ namespace Vision
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
-    void createFramebuffers()
+    void Renderer::createFramebuffers()
     {
         swapChainFramebuffers.resize(swapChainImageViews.size());
 
@@ -815,7 +776,7 @@ namespace Vision
         }
     }
 
-    void createCommandPool()
+    void Renderer::createCommandPool()
     {
         QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
@@ -830,7 +791,7 @@ namespace Vision
         }
     }
 
-    void createColorResources()
+    void Renderer::createColorResources()
     {
         VkFormat colorFormat = swapChainImageFormat;
 
@@ -838,7 +799,7 @@ namespace Vision
         colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
-    void createDepthResources()
+    void Renderer::createDepthResources()
     {
         VkFormat depthFormat = findDepthFormat();
 
@@ -846,7 +807,7 @@ namespace Vision
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
     }
 
-    VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+    VkFormat Renderer::findSupportedFormat(const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
     {
         for (VkFormat format : candidates)
         {
@@ -866,7 +827,7 @@ namespace Vision
         throw std::runtime_error("failed to find supported format!");
     }
 
-    VkFormat findDepthFormat()
+    VkFormat Renderer::findDepthFormat()
     {
         return findSupportedFormat(
             {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
@@ -874,12 +835,12 @@ namespace Vision
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
 
-    bool hasStencilComponent(VkFormat format)
+    bool Renderer::hasStencilComponent(VkFormat format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    void createTextureImage()
+    void Renderer::createTextureImage()
     {
         int texWidth, texHeight, texChannels;
         stbi_uc *pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -914,7 +875,7 @@ namespace Vision
         generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
     }
 
-    void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
+    void Renderer::generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
     {
         // Check if image format supports linear blitting
         VkFormatProperties formatProperties;
@@ -1006,7 +967,7 @@ namespace Vision
         endSingleTimeCommands(commandBuffer);
     }
 
-    VkSampleCountFlagBits getMaxUsableSampleCount()
+    VkSampleCountFlagBits Renderer::getMaxUsableSampleCount()
     {
         VkPhysicalDeviceProperties physicalDeviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
@@ -1040,12 +1001,12 @@ namespace Vision
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    void createTextureImageView()
+    void Renderer::createTextureImageView()
     {
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
     }
 
-    void createTextureSampler()
+    void Renderer::createTextureSampler()
     {
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
@@ -1074,7 +1035,7 @@ namespace Vision
         }
     }
 
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels)
+    VkImageView Renderer::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels)
     {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1096,7 +1057,7 @@ namespace Vision
         return imageView;
     }
 
-    void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory)
+    void Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory)
     {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1134,7 +1095,7 @@ namespace Vision
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
-    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+    void Renderer::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
     {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1186,7 +1147,7 @@ namespace Vision
         endSingleTimeCommands(commandBuffer);
     }
 
-    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+    void Renderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
     {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1209,7 +1170,7 @@ namespace Vision
         endSingleTimeCommands(commandBuffer);
     }
 
-    void createVertexBuffer()
+    void Renderer::createVertexBuffer()
     {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -1230,7 +1191,7 @@ namespace Vision
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    void createIndexBuffer()
+    void Renderer::createIndexBuffer()
     {
         VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
@@ -1251,7 +1212,7 @@ namespace Vision
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    void createUniformBuffers()
+    void Renderer::createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -1267,7 +1228,7 @@ namespace Vision
         }
     }
 
-    void createDescriptorPools()
+    void Renderer::createDescriptorPools()
     {
         // UBO
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
@@ -1314,7 +1275,7 @@ namespace Vision
         }
     }
 
-    void createDescriptorSets()
+    void Renderer::createDescriptorSets()
     {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
@@ -1363,7 +1324,7 @@ namespace Vision
         }
     }
 
-    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
+    void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory)
     {
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1392,7 +1353,7 @@ namespace Vision
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
-    VkCommandBuffer beginSingleTimeCommands()
+    VkCommandBuffer Renderer::beginSingleTimeCommands()
     {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1412,7 +1373,7 @@ namespace Vision
         return commandBuffer;
     }
 
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer)
+    void Renderer::endSingleTimeCommands(VkCommandBuffer commandBuffer)
     {
         vkEndCommandBuffer(commandBuffer);
 
@@ -1427,7 +1388,7 @@ namespace Vision
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+    void Renderer::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
@@ -1438,7 +1399,7 @@ namespace Vision
         endSingleTimeCommands(commandBuffer);
     }
 
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+    uint32_t Renderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
     {
         VkPhysicalDeviceMemoryProperties memProperties;
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
@@ -1454,7 +1415,7 @@ namespace Vision
         throw std::runtime_error("failed to find suitable memory type!");
     }
 
-    void createCommandBuffers()
+    void Renderer::createCommandBuffers()
     {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -1470,7 +1431,7 @@ namespace Vision
         }
     }
 
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+    void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1531,7 +1492,7 @@ namespace Vision
         }
     }
 
-    void createSyncObjects()
+    void Renderer::createSyncObjects()
     {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1555,7 +1516,7 @@ namespace Vision
         }
     }
 
-    void updateUniformBuffer(uint32_t currentImage)
+    void Renderer::updateUniformBuffer(uint32_t currentImage)
     {
         static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -1571,7 +1532,7 @@ namespace Vision
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
-    void drawFrame()
+    void Renderer::drawFrame()
     {
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1646,7 +1607,7 @@ namespace Vision
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    VkShaderModule createShaderModule(const std::vector<char> &code)
+    VkShaderModule Renderer::createShaderModule(const std::vector<char> &code)
     {
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1662,7 +1623,7 @@ namespace Vision
         return shaderModule;
     }
 
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats)
+    VkSurfaceFormatKHR Renderer::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats)
     {
         for (const auto &availableFormat : availableFormats)
         {
@@ -1675,7 +1636,7 @@ namespace Vision
         return availableFormats[0];
     }
 
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
+    VkPresentModeKHR Renderer::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
     {
         for (const auto &availablePresentMode : availablePresentModes)
         {
@@ -1688,7 +1649,7 @@ namespace Vision
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
+    VkExtent2D Renderer::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities)
     {
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
         {
@@ -1710,7 +1671,7 @@ namespace Vision
         }
     }
 
-    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
+    SwapChainSupportDetails Renderer::querySwapChainSupport(VkPhysicalDevice device)
     {
         SwapChainSupportDetails details;
 
@@ -1737,7 +1698,7 @@ namespace Vision
         return details;
     }
 
-    bool isDeviceSuitable(VkPhysicalDevice device)
+    bool Renderer::isDeviceSuitable(VkPhysicalDevice device)
     {
         QueueFamilyIndices indices = findQueueFamilies(device);
 
@@ -1756,7 +1717,7 @@ namespace Vision
         return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
 
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    bool Renderer::checkDeviceExtensionSupport(VkPhysicalDevice device)
     {
         uint32_t extensionCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
@@ -1774,7 +1735,7 @@ namespace Vision
         return requiredExtensions.empty();
     }
 
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+    QueueFamilyIndices Renderer::findQueueFamilies(VkPhysicalDevice device)
     {
         QueueFamilyIndices indices;
 
@@ -1811,7 +1772,7 @@ namespace Vision
         return indices;
     }
 
-    std::vector<const char *> getRequiredExtensions()
+    std::vector<const char *> Renderer::getRequiredExtensions()
     {
         uint32_t glfwExtensionCount = 0;
         const char **glfwExtensions;
@@ -1827,7 +1788,7 @@ namespace Vision
         return extensions;
     }
 
-    bool checkValidationLayerSupport()
+    bool Renderer::checkValidationLayerSupport()
     {
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
